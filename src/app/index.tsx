@@ -1,5 +1,6 @@
 import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { AppState, Platform, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AnimatedIcon } from '@/components/animated-icon';
@@ -8,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { WebBadge } from '@/components/web-badge';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useSensorStore } from '@/stores/sensorStore';
 
 function getDevMenuHint() {
   if (Platform.OS === 'web') {
@@ -29,13 +31,63 @@ function getDevMenuHint() {
 }
 
 export default function HomeScreen() {
+  const appState = useSensorStore((state) => state.appState);
+  const setAppState = useSensorStore((state) => state.setAppState);
+  const pushLog = useSensorStore((state) => state.pushLog);
+  const updateLastLogDuration = useSensorStore(
+    (state) => state.updateLastLogDuration
+  );
+
+  const previousState = useRef(AppState.currentState);
+  const backgroundStart = useRef<number | null>(null);
+
+  useEffect(() => {
+    setAppState(AppState.currentState);
+
+    const subscription = AppState.addEventListener('change', nextState => {
+      const oldState = previousState.current;
+
+      if (nextState === 'background') {
+        backgroundStart.current = Date.now();
+      }
+
+      if (
+        nextState === 'active' &&
+        backgroundStart.current !== null
+      ) {
+        const duration = Date.now() - backgroundStart.current;
+
+        updateLastLogDuration(duration);
+
+        backgroundStart.current = null;
+      }
+
+      setAppState(nextState);
+      pushLog(oldState, nextState);
+
+      previousState.current = nextState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
+        <ThemedView style={styles.badge}>
+          <ThemedText style={styles.badgeText}>
+            {appState}
+          </ThemedText>
+        </ThemedView>
         <ThemedView style={styles.heroSection}>
           <AnimatedIcon />
           <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
+            Bienvenue aux{'\n'}
+            <ThemedText type="title" style={styles.pompes}>
+              Pompes Funèbres
+            </ThemedText>
           </ThemedText>
         </ThemedView>
 
@@ -85,6 +137,9 @@ const styles = StyleSheet.create({
   title: {
     textAlign: 'center',
   },
+  pompes: {
+    color: 'red',
+  },
   code: {
     textTransform: 'uppercase',
   },
@@ -94,5 +149,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.four,
     borderRadius: Spacing.four,
+  },
+  badge: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'green',
+  },
+  badgeText: {
+    color: 'white',
+    fontWeight: 'bold',
   },
 });
